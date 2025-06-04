@@ -20,7 +20,7 @@ Follow these steps to configure query tags in your dbt Core project:
 
 ### 1. Add Query Tag to `profiles.yml`
 
-Add the query tag configuration to your `profiles.yml` file (typically located in `~/.dbt/profiles.yml`). Replace the values with your actual integration ID and environment name:
+Add the query tag configuration to your `profiles.yml` file (typically located in `~/.dbt/profiles.yml`). Replace the values with your actual integration ID and environment name. You can get the values from the SaaS UI under Settings -> Integrations:
 
 ```yaml
 # Example profiles.yml configuration
