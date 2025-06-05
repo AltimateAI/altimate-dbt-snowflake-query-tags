@@ -131,7 +131,6 @@
     {% endif %}
     
     {% set query_tag_json = tojson(query_tag) %}
-    {{ log("Setting query_tag to '" ~ query_tag_json ~ "'. Will reset to '" ~ original_query_tag ~ "' after materialization.") }}
     {% do run_query("alter session set query_tag = '{}'".format(query_tag_json)) %}
     {{ return(original_query_tag)}}
 {% endmacro %}
