@@ -1,6 +1,6 @@
 # Altimate dbt Query Tags
 
-This guide will help you set up query tags to identify your dbt workloads in both **dbt Core** and **dbt Cloud** environments.
+This guide will help you set up query tags in **snowflake** to identify your dbt workloads executed in both **dbt Core** and **dbt Cloud** environments.
 
 ---
 
