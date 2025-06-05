@@ -20,7 +20,7 @@
     {# Start with any model-configured dict #}
     {% set query_tag = config.get('query_tag', default={}) %}
     {% if query_tag is not mapping %}
-    {% do log("dbt-snowflake-query-tags warning: the query_tag config value of '{}' is not a mapping type, so is being ignored. If you'd like to add additional query tag information, use a mapping type instead, or remove it to avoid this message.".format(query_tag), True) %}
+    {% do log("altimate-query-tag-warning: the query_tag config value of '{}' is not a mapping type, so is being ignored. If you'd like to add additional query tag information, use a mapping type instead, or remove it to avoid this message.".format(query_tag), True) %}
     {% set query_tag = {} %} {# If the user has set the query tag config as a non mapping type, start fresh #}
     {% endif %}
     
