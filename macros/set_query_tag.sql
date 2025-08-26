@@ -108,6 +108,17 @@
     {% endif %}
     
     {% set query_tag_json = tojson(query_tag) %}
-    {% do run_query("alter session set query_tag = '{}'".format(query_tag_json)) %}
+    
+    {# Check if the query tag exceeds 2000 characters, if so use original query tag #}
+    {% if query_tag_json and query_tag_json|length > 2000 %}
+        {% do log("altimate-query-tag-warning: The constructed query tag is too long ({} characters). Snowflake limits query tags to 2000 characters, so the original query tag will be preserved instead. This is possible if the model names are too large or the number of query_tags is too high. Query Tag json: {}".format(query_tag_json|length, query_tag_json), True) %}
+        {% if original_query_tag %}
+            {% do run_query("alter session set query_tag = '{}'".format(original_query_tag)) %}
+        {% else %}
+            {% do run_query("alter session set query_tag = ''") %}
+        {% endif %}
+    {% else %}
+        {% do run_query("alter session set query_tag = '{}'".format(query_tag_json)) %}
+    {% endif %}
     {{ return(original_query_tag)}}
 {% endmacro %}
