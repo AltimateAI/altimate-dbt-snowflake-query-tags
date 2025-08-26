@@ -45,7 +45,6 @@
             node_name=model.name,
             node_alias=model.alias,
             node_package_name=model.package_name,
-            node_original_file_path=model.original_file_path,
             node_database=model.database,
             node_schema=model.schema,
             node_id=model.unique_id,
@@ -59,13 +58,7 @@
                 materialized=model.config.materialized
             ) %}
         {% endif %}
-        
-        {% if model.raw_code is not none and local_md5 %}
-            {% do query_tag.update({
-                "raw_code_hash": local_md5(model.raw_code)
-            }) %}
-        {% endif %}
-    {% endif %}
+            {% endif %}
     
     {# Add extra parameters passed to the macro #}
     {% do query_tag.update(extra) %}
