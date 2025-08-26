@@ -70,9 +70,6 @@
                         {% do refs.append(ref[0]) %}
                     {% endif %}
                 {% endfor %}
-                {% do query_tag.update(
-                    node_refs=refs | unique | list
-                ) %}
             {% endif %}
         {% endif %}
         
@@ -89,7 +86,7 @@
     {# Add standard dbt information #}
     {% do query_tag.update(
         app='dbt',
-        dbt_snowflake_query_tags_version='1.0.1',
+        dbt_snowflake_query_tags_version='1.0.2',
         dbt_version=dbt_version,
         project_name=project_name,
         target_name=target.name,
