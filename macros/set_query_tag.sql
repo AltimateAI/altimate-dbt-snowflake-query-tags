@@ -60,19 +60,6 @@
             ) %}
         {% endif %}
         
-        {% if model.resource_type != 'seed' %}
-            {% if model.refs is defined %}
-                {% set refs = [] %}
-                {% for ref in model.refs %}
-                    {% if dbt_version >= '1.5.0' %}
-                        {% do refs.append(ref.name) %}
-                    {% else %}
-                        {% do refs.append(ref[0]) %}
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
-        {% endif %}
-        
         {% if model.raw_code is not none and local_md5 %}
             {% do query_tag.update({
                 "raw_code_hash": local_md5(model.raw_code)
