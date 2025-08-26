@@ -60,22 +60,6 @@
             ) %}
         {% endif %}
         
-        {% if model.resource_type != 'seed' %}
-            {% if model.refs is defined %}
-                {% set refs = [] %}
-                {% for ref in model.refs %}
-                    {% if dbt_version >= '1.5.0' %}
-                        {% do refs.append(ref.name) %}
-                    {% else %}
-                        {% do refs.append(ref[0]) %}
-                    {% endif %}
-                {% endfor %}
-                {% do query_tag.update(
-                    node_refs=refs | unique | list
-                ) %}
-            {% endif %}
-        {% endif %}
-        
         {% if model.raw_code is not none and local_md5 %}
             {% do query_tag.update({
                 "raw_code_hash": local_md5(model.raw_code)
@@ -89,7 +73,7 @@
     {# Add standard dbt information #}
     {% do query_tag.update(
         app='dbt',
-        dbt_snowflake_query_tags_version='1.0.1',
+        dbt_snowflake_query_tags_version='1.0.2',
         dbt_version=dbt_version,
         project_name=project_name,
         target_name=target.name,
