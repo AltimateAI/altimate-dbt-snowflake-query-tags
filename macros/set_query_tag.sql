@@ -58,7 +58,7 @@
                 materialized=model.config.materialized
             ) %}
         {% endif %}
-            {% endif %}
+    {% endif %}
     
     {# Add extra parameters passed to the macro #}
     {% do query_tag.update(extra) %}
