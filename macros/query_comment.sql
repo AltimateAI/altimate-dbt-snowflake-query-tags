@@ -76,5 +76,6 @@
         {%- do comment_dict.update(dbt_cloud_run_reason=env_var('DBT_CLOUD_RUN_REASON')) -%}
     {%- endif -%}
 
-    {{ return(tojson(comment_dict)) }}
+    {# Sanitize */ which is illegal in SQL block comments and causes dbt to error #}
+    {{ return(tojson(comment_dict) | replace("*/", "* /")) }}
 {% endmacro %}
