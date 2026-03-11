@@ -1,29 +1,31 @@
 # Altimate dbt Query Tags
 
-This guide will help you set up query tags in **snowflake** to identify your dbt workloads executed in both **dbt Core** and **dbt Cloud** environments.
+This package enriches your Snowflake dbt workloads with comprehensive metadata using **two complementary mechanisms**:
+
+- **Query Comments**: Rich metadata appended to every SQL statement (no character limit)
+- **Query Tags**: Lean session-level tags for quick identification (respects Snowflake's 2000-character limit)
+
+This dual approach solves the common problem of query tags exceeding Snowflake's 2000-character limit while preserving all metadata in query comments.
 
 ---
 
-## 🔧 Step 1: Initial Setup
+## Step 1: Initial Setup
 
 ### Create dbt Integration and Environment
 
-1. Navigate to **Settings** → **Integrations** in the UI
+1. Navigate to **Settings** > **Integrations** in the UI
 2. Click **"Create New Integration"** and select **dbt Integration**
 3. Create a new **dbt Environment** for your project
 
 ---
 
-## 🧩 dbt Core Setup
-
-Follow these steps to configure query tags in your dbt Core project:
+## dbt Core Setup
 
 ### 1. Add Query Tag to `profiles.yml`
 
-Add the query tag configuration to your `profiles.yml` file (typically located in `~/.dbt/profiles.yml`). Replace the values with your actual integration ID and environment name. You can get the values from the SaaS UI under Settings -> Integrations:
+Add the query tag configuration to your `profiles.yml` file (typically located in `~/.dbt/profiles.yml`). Replace the values with your actual integration ID and environment name from the SaaS UI under Settings -> Integrations:
 
 ```yaml
-# Example profiles.yml configuration
 my_profile:
   outputs:
     prod:
@@ -35,7 +37,6 @@ my_profile:
       schema: your_schema
       user: your_username
       password: your_password
-# ... other connection parameters
     dev:
       query_tag: '{"dbt_integration_id": 1, "dbt_integration_environment": "DEV"}'
       type: snowflake
@@ -48,19 +49,7 @@ my_profile:
   target: prod
 ```
 
-Your `dbt_project.yml` should reference this profile:
-
-```yaml
-name: 'my_project'
-version: '1.0.0'
-profile: 'my_profile'  # This should match the profile name in profiles.yml
-
-models:
-  my_project:
-    # Your model configurations here
-```
-
-> ⚠️ Important: Make sure the query_tag which is set in the project is in valid JSON format.
+> **Important:** The `query_tag` must be valid JSON.
 
 ### 2. Update `packages.yml`
 
@@ -68,18 +57,25 @@ Create or update your `packages.yml` file to include the Altimate query tags pac
 
 ```yaml
 packages:
-  - git: "https://github.com/AltimateAI/altimate-dbt-query-tags.git"
+  - git: "https://github.com/AltimateAI/altimate-dbt-snowflake-query-tags.git"
+    revision: main
 
   # Your other packages
   - package: dbt-labs/dbt_utils
     version: 1.1.1
 ```
 
-### 3. Configure Dispatch in `dbt_project.yml`
+### 3. Configure `dbt_project.yml`
 
-Add the dispatch configuration to ensure the query tag macros are properly loaded:
+Add the dispatch and query-comment configurations:
 
 ```yaml
+# Enable query comments — comprehensive metadata appended to every SQL statement
+query-comment:
+  comment: '{{ altimate_snowflake_query_tags.get_query_comment(node) }}'
+  append: true
+
+# Enable query tags — lean session-level tags via dispatch
 dispatch:
   - macro_namespace: dbt
     search_order:
@@ -88,35 +84,141 @@ dispatch:
       - dbt
 ```
 
-> 📝 Note: Replace YOUR_PROJECT_NAME with the actual name of your dbt project (the name field in your dbt_project.yml).
+> **Note:** `append: true` is required because Snowflake strips leading SQL comments. Appending ensures the comment is preserved.
 
-## ☁️ dbt Cloud Setup
+### 4. Run `dbt deps`
 
-For dbt Cloud users, follow these steps:
+Install the package:
+
+```bash
+dbt deps
+```
+
+---
+
+## dbt Cloud Setup
 
 ### 1. Configure Cloud Profile
 
 1. Navigate to your **dbt Cloud Project Settings**
-2. Go to **Connection** → **Extended Attributes**
+2. Go to **Connection** > **Extended Attributes**
+3. Add the `query_tag` JSON with your integration ID and environment
 
 ### 2. Update `packages.yml`
 
-Add the query tags package to your dbt Cloud project:
-
 ```yaml
 packages:
-  - git: "https://github.com/AltimateAI/altimate-dbt-query-tags.git"
+  - git: "https://github.com/AltimateAI/altimate-dbt-snowflake-query-tags.git"
+    revision: main
 ```
 
 ### 3. Configure `dbt_project.yml`
 
-Update your dispatch configuration:
-
 ```yaml
+query-comment:
+  comment: '{{ altimate_snowflake_query_tags.get_query_comment(node) }}'
+  append: true
+
 dispatch:
   - macro_namespace: dbt
     search_order:
-      - YOUR_PROJECT_NAME  # Your dbt Cloud project name
+      - YOUR_PROJECT_NAME
       - altimate_snowflake_query_tags
       - dbt
 ```
+
+---
+
+## What Gets Captured
+
+### Query Comment (appended to SQL)
+
+The query comment contains comprehensive metadata with no character limit:
+
+| Field | Description |
+|---|---|
+| `app` | Always `"dbt"` |
+| `dbt_snowflake_query_tags_version` | Package version |
+| `dbt_version` | dbt version |
+| `project_name` | dbt project name |
+| `target_name` | Target environment name |
+| `target_database` | Target database |
+| `target_schema` | Target schema |
+| `invocation_id` | Unique run identifier |
+| `run_started_at` | Run start timestamp (UTC ISO format) |
+| `full_refresh` | Whether this is a full refresh run |
+| `node_name` | Model/test/seed name |
+| `node_alias` | Node alias |
+| `node_package_name` | Package the node belongs to |
+| `node_original_file_path` | Source file path |
+| `node_database` | Node's target database |
+| `node_schema` | Node's target schema |
+| `node_id` | Unique node identifier |
+| `node_resource_type` | Type (model, test, seed, etc.) |
+| `node_meta` | Custom metadata from schema.yml |
+| `node_tags` | Tags assigned to the node |
+| `node_refs` | Referenced models |
+| `materialized` | Materialization strategy (models only) |
+| `raw_code_hash` | MD5 hash of model code |
+| `dbt_cloud_*` | dbt Cloud metadata (when available) |
+
+### Query Tag (session-level)
+
+The query tag is kept lean to stay within Snowflake's 2000-character limit:
+
+| Field | Description |
+|---|---|
+| `dbt_integration_id` | Altimate integration identifier (from `profiles.yml`) |
+| `dbt_integration_environment` | Environment (PROD, DEV, etc.) (from `profiles.yml`) |
+| `is_incremental` | Whether running incrementally (models only) |
+
+The query tag preserves all session-level keys set in `profiles.yml` and adds only `is_incremental` — which is only available at execution time and cannot be captured in query comments.
+
+---
+
+## Customization
+
+### Add Custom Fields to Query Comments
+
+```yaml
+# dbt_project.yml
+query-comment:
+  comment: >
+    {{ altimate_snowflake_query_tags.get_query_comment(
+      node,
+      extra={'team': 'data-platform', 'slack_channel': '#data-alerts'}
+    ) }}
+  append: true
+```
+
+---
+
+## Upgrading from v1.x
+
+Version 2.0 introduces query comments as the primary metadata carrier. The key change:
+
+1. **Add `query-comment` to your `dbt_project.yml`** (new requirement)
+2. **Query tags are now lean** — comprehensive metadata moved to query comments
+3. **`unset_query_tag` macro added** — properly restores session state after model execution
+
+The `dbt_integration_id` and `dbt_integration_environment` fields remain in the query tag for backward compatibility with Altimate extractors.
+
+---
+
+## Verifying in Snowflake
+
+After running `dbt run`, verify both mechanisms:
+
+```sql
+-- Check query comments (visible in QUERY_TEXT or via query profile)
+SELECT
+    query_id,
+    query_text,
+    query_tag
+FROM snowflake.account_usage.query_history
+WHERE query_tag LIKE '%dbt_integration_id%'
+ORDER BY start_time DESC
+LIMIT 10;
+```
+
+The query comment appears appended to the SQL statement. The query tag appears in the `QUERY_TAG` column.
