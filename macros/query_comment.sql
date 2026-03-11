@@ -3,9 +3,10 @@
     {%- do comment_dict.update(extra) -%}
 
     {# Add standard dbt information #}
+    {# run_started_at is already UTC-aware in dbt, no explicit timezone conversion needed #}
     {%- do comment_dict.update(
         app='dbt',
-        dbt_snowflake_query_tags_version='2.0.0',
+        dbt_snowflake_query_tags_version=var('dbt_snowflake_query_tags_version', '2.0.0'),
         dbt_version=dbt_version,
         project_name=project_name,
         target_name=target.name,
@@ -45,7 +46,8 @@
                 {%- if ref.name is defined -%}
                     {%- do refs.append(ref.name) -%}
                 {%- elif ref is iterable and ref is not string -%}
-                    {%- do refs.append(ref[0]) -%}
+                    {# ref[-1] handles two-part refs like ref('package', 'model') #}
+                    {%- do refs.append(ref[-1]) -%}
                 {%- else -%}
                     {%- do refs.append(ref | string) -%}
                 {%- endif -%}
@@ -76,6 +78,8 @@
         {%- do comment_dict.update(dbt_cloud_run_reason=env_var('DBT_CLOUD_RUN_REASON')) -%}
     {%- endif -%}
 
-    {# Sanitize */ which is illegal in SQL block comments and causes dbt to error #}
+    {# Sanitize */ which is illegal in SQL block comments and causes dbt to error.
+       This makes the JSON technically invalid if a value contained */, but this is
+       an acceptable trade-off vs breaking every SQL statement in the run. #}
     {{ return(tojson(comment_dict) | replace("*/", "* /")) }}
 {% endmacro %}

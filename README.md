@@ -195,13 +195,18 @@ query-comment:
 
 ## Upgrading from v1.x
 
-Version 2.0 introduces query comments as the primary metadata carrier. The key change:
+Version 2.0 introduces query comments as the primary metadata carrier. Breaking changes:
 
-1. **Add `query-comment` to your `dbt_project.yml`** (new requirement)
-2. **Query tags are now lean** — comprehensive metadata moved to query comments
+1. **Add `query-comment` to your `dbt_project.yml`** (new requirement — this is where all metadata now lives)
+2. **Query tags are now lean** — only session-level keys (`dbt_integration_id`, `dbt_integration_environment`) plus `is_incremental` remain in the query tag. All other metadata moved to query comments.
 3. **`unset_query_tag` macro added** — properly restores session state after model execution
+4. **`extra` parameter removed from `set_query_tag`** — if you were passing custom fields via `set_query_tag(extra={...})`, move them to `get_query_comment(node, extra={...})` in your `query-comment` config instead.
+5. **`env_vars_to_query_tag_list` variable removed** — environment variables are no longer added to query tags. They can be added to query comments via the `extra` parameter.
+6. **`thread_id` removed from query tags** — thread information is no longer included. If needed, add it via `extra` in `get_query_comment`.
 
 The `dbt_integration_id` and `dbt_integration_environment` fields remain in the query tag for backward compatibility with Altimate extractors.
+
+> **Note on query comment size:** While query comments have no enforced character limit, Snowflake's `QUERY_TEXT` column has a 100KB limit. Keep `node_meta` and `node_tags` reasonable to avoid truncation in query history.
 
 ---
 
@@ -210,13 +215,23 @@ The `dbt_integration_id` and `dbt_integration_environment` fields remain in the 
 After running `dbt run`, verify both mechanisms:
 
 ```sql
--- Check query comments (visible in QUERY_TEXT or via query profile)
+-- Check via query tag
 SELECT
     query_id,
     query_text,
     query_tag
 FROM snowflake.account_usage.query_history
 WHERE query_tag LIKE '%dbt_integration_id%'
+ORDER BY start_time DESC
+LIMIT 10;
+
+-- Check via query comment content
+SELECT
+    query_id,
+    query_text,
+    query_tag
+FROM snowflake.account_usage.query_history
+WHERE query_text LIKE '%dbt_snowflake_query_tags_version%'
 ORDER BY start_time DESC
 LIMIT 10;
 ```
