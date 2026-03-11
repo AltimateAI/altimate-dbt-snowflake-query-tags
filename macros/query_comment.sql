@@ -42,7 +42,7 @@
         {%- if node.resource_type != 'seed' and node.refs is defined -%}
             {% set refs = [] %}
             {% for ref in node.refs %}
-                {%- if ref is mapping -%}
+                {%- if ref.name is defined -%}
                     {%- do refs.append(ref.name) -%}
                 {%- elif ref is iterable and ref is not string -%}
                     {%- do refs.append(ref[0]) -%}
