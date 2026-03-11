@@ -1,4 +1,4 @@
-{% macro default__set_query_tag(extra = {}) -%}
+{% macro default__set_query_tag() -%}
     {# Get session level query tag set via profiles.yml #}
     {% set original_query_tag = get_current_query_tag() %}
     {% set original_query_tag_parsed = {} %}
@@ -12,8 +12,8 @@
     {% set query_tag = original_query_tag_parsed %}
 
     {# is_incremental is only available at execution time, not in the query comment context #}
-    {# Guard with execute to prevent dbt parser from flagging seed hooks as node dependencies #}
-    {% if execute and model is not none and model.resource_type == 'model' %}
+    {# Guard with execute and defined checks for seed/run-operation compatibility #}
+    {% if execute and model is defined and model is not none and model.resource_type == 'model' %}
         {% do query_tag.update(is_incremental=is_incremental()) %}
     {% endif %}
 
@@ -23,12 +23,14 @@
     {% if query_tag_json and query_tag_json|length > 2000 %}
         {% do log("altimate-query-tag-warning: The constructed query tag is too long ({} characters). Snowflake limits query tags to 2000 characters, so the original query tag will be preserved instead.".format(query_tag_json|length), True) %}
         {% if original_query_tag %}
-            {% do run_query("alter session set query_tag = '{}'".format(original_query_tag)) %}
+            {% set safe_tag = original_query_tag | replace("'", "''") %}
+            {% do run_query("alter session set query_tag = '{}'".format(safe_tag)) %}
         {% else %}
             {% do run_query("alter session set query_tag = ''") %}
         {% endif %}
     {% else %}
-        {% do run_query("alter session set query_tag = '{}'".format(query_tag_json)) %}
+        {% set safe_tag = query_tag_json | replace("'", "''") %}
+        {% do run_query("alter session set query_tag = '{}'".format(safe_tag)) %}
     {% endif %}
 
     {{ return(original_query_tag) }}
