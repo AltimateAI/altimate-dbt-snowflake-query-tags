@@ -83,8 +83,6 @@
         {%- do comment_dict.update(dbt_cloud_run_reason=env_var('DBT_CLOUD_RUN_REASON')) -%}
     {%- endif -%}
 
-    {# Sanitize */ which is illegal in SQL block comments and causes dbt to error.
-       This makes the JSON technically invalid if a value contained */, but this is
-       an acceptable trade-off vs breaking every SQL statement in the run. #}
-    {{ return(tojson(comment_dict) | replace("*/", "* /")) }}
+    {# Sanitize: */ breaks SQL block comments, null bytes cause driver errors #}
+    {{ return(tojson(comment_dict) | replace("*/", "* /") | replace("\x00", "")) }}
 {% endmacro %}
