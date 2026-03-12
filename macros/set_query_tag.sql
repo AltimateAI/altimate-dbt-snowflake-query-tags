@@ -1,4 +1,4 @@
-{% macro default__set_query_tag() -%}
+{% macro default__set_query_tag(extra = {}) -%}
     {# Get session level query tag set via profiles.yml #}
     {% set original_query_tag = get_current_query_tag() %}
     {% set original_query_tag_parsed = {} %}
@@ -10,6 +10,16 @@
 
     {# Start with session-level query tag (preserves dbt_integration_id, dbt_integration_environment, etc.) #}
     {% set query_tag = original_query_tag_parsed %}
+
+    {# Merge any custom fields passed via extra #}
+    {% if extra is mapping %}
+        {% do query_tag.update(extra) %}
+    {% endif %}
+
+    {# Add thread_id for debugging concurrent runs #}
+    {% if thread_id is defined and thread_id %}
+        {% do query_tag.update(thread_id=thread_id) %}
+    {% endif %}
 
     {# is_incremental is only available at execution time, not in the query comment context #}
     {# Guard with execute and defined checks for seed/run-operation compatibility #}

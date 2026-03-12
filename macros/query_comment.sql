@@ -14,8 +14,13 @@
         target_schema=target.schema,
         invocation_id=invocation_id,
         run_started_at=run_started_at.isoformat(),
-        full_refresh=flags.FULL_REFRESH
+        full_refresh=flags.FULL_REFRESH,
+        which=flags.WHICH
     ) -%}
+
+    {%- if flags.INVOCATION_COMMAND is defined and flags.INVOCATION_COMMAND -%}
+        {%- do comment_dict.update(invocation_command=flags.INVOCATION_COMMAND) -%}
+    {%- endif -%}
 
     {# Add node-specific information if available #}
     {%- if node is not none -%}
