@@ -10,10 +10,9 @@ from context import (  # noqa: E402
     DBT_CLOUD_ENV,
     SESSION_TAG,
     query_comment,
-    set_query_tag,
-)
+    set_query_tag)
 
-FULL = {"altimate_query_tag_level": "full"}
+SESSION_ONLY = {"altimate_query_tag_fields": "session"}
 
 # Every key the select package writes to QUERY_TAG, from the Altimate vs Select
 # comparison. `full` mode is expected to match this set exactly, except for
@@ -35,32 +34,38 @@ IDENTITY_KEYS = [
 ]
 
 
-def test_lean_is_the_default():
+def test_all_is_the_default():
     tag, _, _ = set_query_tag(session_tag=SESSION_TAG)
+    assert tag["node_id"] == "model.jaffle.my_model"
+    assert tag["project_name"] == "jaffle"
+
+
+def test_session_carries_only_session_level_keys():
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=SESSION_ONLY)
     assert set(tag) == {
         "dbt_integration_id", "dbt_integration_environment", "thread_id", "is_incremental",
     }
 
 
-def test_full_matches_the_select_package_key_set():
-    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV, dbt_vars=FULL)
+def test_all_matches_the_select_package_key_set():
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV)
     assert [key for key in SELECT_PACKAGE_KEYS if key not in tag] == []
     assert [key for key in tag if key not in SELECT_PACKAGE_KEYS] == []
 
 
-def test_full_fits_the_limit_for_a_typical_node():
-    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV, dbt_vars=FULL)
+def test_all_fits_the_limit_for_a_typical_node():
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV)
     assert len(json.dumps(tag)) < 2000
 
 
-def test_query_comment_is_unaffected_by_tag_level():
+def test_query_comment_is_unaffected_by_tag_fields():
     comment = query_comment(env=DBT_CLOUD_ENV)
     for key in ("node_id", "node_meta", "raw_code_hash", "dbt_cloud_job_id", "invocation_command"):
         assert key in comment
 
 
 def test_model_level_query_tag_config_is_merged():
-    for dbt_vars in ({}, FULL):
+    for dbt_vars in ({}, SESSION_ONLY):
         tag, _, _ = set_query_tag(
             session_tag=SESSION_TAG, dbt_vars=dbt_vars, model_config={"query_tag": {"cost_center": "FIN-42"}}
         )
@@ -71,8 +76,7 @@ def test_env_vars_to_query_tag_list_is_merged():
     tag, _, _ = set_query_tag(
         session_tag=SESSION_TAG,
         dbt_vars={"env_vars_to_query_tag_list": ["MY_RUN_OWNER"]},
-        env={"MY_RUN_OWNER": "finance"},
-    )
+        env={"MY_RUN_OWNER": "finance"})
     assert tag["my_run_owner"] == "finance"
 
 
@@ -90,7 +94,7 @@ def test_non_mapping_config_is_ignored_with_a_warning():
 
 def test_oversized_tag_drops_expendable_fields_and_keeps_identity():
     tag, logs, _ = set_query_tag(
-        session_tag=SESSION_TAG, dbt_vars=FULL, node_meta={"desc": "x" * 1500}
+        session_tag=SESSION_TAG, node_meta={"desc": "x" * 1500}
     )
     assert "node_meta" not in tag
     assert all(key in tag for key in IDENTITY_KEYS)
@@ -101,17 +105,15 @@ def test_oversized_tag_drops_expendable_fields_and_keeps_identity():
 def test_user_supplied_keys_survive_trimming():
     tag, _, _ = set_query_tag(
         session_tag=SESSION_TAG,
-        dbt_vars=FULL,
         node_meta={"desc": "x" * 2500},
-        model_config={"query_tag": {"cost_center": "FIN-42"}},
-    )
+        model_config={"query_tag": {"cost_center": "FIN-42"}})
     assert tag["cost_center"] == "FIN-42"
     assert len(json.dumps(tag)) <= 2000
 
 
 def test_unfittable_tag_falls_back_to_the_original_session_tag():
     tag, logs, _ = set_query_tag(
-        session_tag=SESSION_TAG, dbt_vars=FULL, model_config={"query_tag": {"blob": "y" * 2600}}
+        session_tag=SESSION_TAG, model_config={"query_tag": {"blob": "y" * 2600}}
     )
     assert tag == json.loads(SESSION_TAG)
     assert any("cannot be reduced" in message for message in logs)
@@ -120,8 +122,7 @@ def test_unfittable_tag_falls_back_to_the_original_session_tag():
 def test_max_length_var_is_respected():
     tag, _, _ = set_query_tag(
         session_tag=SESSION_TAG,
-        dbt_vars={"altimate_query_tag_level": "full", "altimate_query_tag_max_length": 400},
-    )
+        dbt_vars={"altimate_query_tag_fields": "all", "altimate_query_tag_max_length": 400})
     assert len(json.dumps(tag)) <= 400
 
 
@@ -129,38 +130,46 @@ def test_exclude_var_removes_keys():
     tag, _, _ = set_query_tag(
         session_tag=SESSION_TAG,
         dbt_vars={
-            "altimate_query_tag_level": "full",
             "altimate_query_tag_exclude": ["raw_code_hash", "node_meta"],
-        },
-    )
+        })
     assert "raw_code_hash" not in tag and "node_meta" not in tag
 
 
-def test_unknown_level_warns_and_falls_back_to_lean():
+def test_unknown_value_warns_and_falls_back_to_the_default():
     tag, logs, _ = set_query_tag(
-        session_tag=SESSION_TAG, dbt_vars={"altimate_query_tag_level": "FULL_SEND"}
+        session_tag=SESSION_TAG, dbt_vars={"altimate_query_tag_fields": "EVERYTHING"}
     )
-    assert "node_id" not in tag
+    assert tag["node_id"] == "model.jaffle.my_model"
     assert any("is not recognised" in message for message in logs)
+
+
+def test_values_are_trimmed_and_case_insensitive():
+    for value in ("ALL", " all ", "Session", " session"):
+        tag, logs, _ = set_query_tag(
+            session_tag=SESSION_TAG, dbt_vars={"altimate_query_tag_fields": value}
+        )
+        assert logs == [], "%r should be accepted, got %r" % (value, logs)
+        expected_full = value.strip().lower() == "all"
+        assert ("node_id" in tag) is expected_full
 
 
 def test_missing_or_invalid_session_tag_is_tolerated():
     for session_tag in (None, "not json at all"):
-        tag, _, _ = set_query_tag(session_tag=session_tag, dbt_vars=FULL)
+        tag, _, _ = set_query_tag(session_tag=session_tag)
         assert tag["node_id"] == "model.jaffle.my_model"
 
 
 def test_non_model_nodes():
     for resource_type in ("seed", "test", "snapshot"):
         tag, _, _ = set_query_tag(
-            session_tag=SESSION_TAG, dbt_vars=FULL, resource_type=resource_type
+            session_tag=SESSION_TAG, resource_type=resource_type
         )
         assert "is_incremental" not in tag
         assert tag["node_resource_type"] == resource_type
 
 
 def test_seeds_omit_node_refs():
-    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=FULL, resource_type="seed")
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, resource_type="seed")
     assert "node_refs" not in tag
 
 
@@ -173,7 +182,7 @@ def test_single_quotes_are_escaped_in_the_alter_session_statement():
 
 
 def test_model_without_refs():
-    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=FULL, refs=[])
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, refs=[])
     assert tag["node_id"] == "model.jaffle.my_model"
 
 

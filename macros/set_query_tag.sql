@@ -4,13 +4,15 @@
         materialization. dbt-snowflake calls this with no arguments, so `extra`
         is only populated by custom materializations that pass it.
 
-        Controlled by the `altimate_query_tag_level` var:
-          lean (default) - session keys from profiles.yml, user-supplied tags,
-                           thread_id and is_incremental. All other metadata
-                           lives in the query comment.
-          full           - everything the query comment carries, trimmed to fit
-                           Snowflake's 2000-character limit. Use when downstream
-                           processes read QUERY_TAG rather than parsing comments.
+        Controlled by the `altimate_query_tag_fields` var:
+          all (default) - everything the query comment carries, trimmed to fit
+                          Snowflake's 2000-character limit. Downstream consumers
+                          that read QUERY_TAG rather than parsing query comments
+                          need this.
+          session       - only the keys set in profiles.yml, plus user-supplied
+                          tags, thread_id and is_incremental. Keeps the tag
+                          small; all other metadata is still in the query
+                          comment.
     #}
     {% set original_query_tag = get_current_query_tag() %}
     {% set original_query_tag_parsed = {} %}
@@ -22,14 +24,14 @@
 
     {% set query_tag = {} %}
 
-    {% set tag_level = var('altimate_query_tag_level', 'lean') | lower %}
-    {% if tag_level not in ['lean', 'full'] %}
-        {% do log("altimate-query-tag-warning: altimate_query_tag_level '{}' is not recognised, falling back to 'lean'. Valid values are 'lean' and 'full'.".format(tag_level), True) %}
-        {% set tag_level = 'lean' %}
+    {% set tag_fields = var('altimate_query_tag_fields', 'all') | string | trim | lower %}
+    {% if tag_fields not in ['session', 'all'] %}
+        {% do log("altimate-query-tag-warning: altimate_query_tag_fields '{}' is not recognised, falling back to 'all'. Valid values are 'session' and 'all'.".format(tag_fields), True) %}
+        {% set tag_fields = 'all' %}
     {% endif %}
 
-    {# In 'full' mode the query tag carries the same metadata as the query comment #}
-    {% if tag_level == 'full' %}
+    {# With 'all', the query tag carries the same metadata as the query comment #}
+    {% if tag_fields == 'all' %}
         {% set node = model if model is defined else none %}
         {% do query_tag.update(altimate_snowflake_query_tags.altimate_build_metadata(node)) %}
     {% endif %}

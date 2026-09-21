@@ -46,6 +46,6 @@
         {{ return(query_tag) }}
     {%- endif -%}
 
-    {%- do log("altimate-query-tag-warning: query tag is {} characters and cannot be reduced below {}. The original session query tag will be preserved instead. Consider shortening user-supplied query tag values or setting altimate_query_tag_level to 'lean'.".format(tojson(query_tag) | length, max_length), True) -%}
+    {%- do log("altimate-query-tag-warning: query tag is {} characters and cannot be reduced below {}. The original session query tag will be preserved instead. Consider shortening user-supplied query tag values or setting altimate_query_tag_fields to 'session'.".format(tojson(query_tag) | length, max_length), True) -%}
     {{ return(none) }}
 {% endmacro %}

@@ -3,11 +3,11 @@
 This package enriches your Snowflake dbt workloads with comprehensive metadata using **two complementary mechanisms**:
 
 - **Query Comments**: Rich metadata appended to every SQL statement (no character limit)
-- **Query Tags**: Snowflake's native `QUERY_TAG` session parameter, lean by default and configurable to carry the full metadata set
+- **Query Tags**: Snowflake's native `QUERY_TAG` session parameter, carrying the full metadata set by default
 
 This dual approach solves the common problem of query tags exceeding Snowflake's 2000-character limit while preserving all metadata in query comments.
 
-If downstream processes read Snowflake's native `QUERY_TAG` rather than parsing query comments, set `altimate_query_tag_level: 'full'` — see [Query tag contents](#query-tag-contents).
+To keep the query tag small instead, set `altimate_query_tag_fields: 'session'` — see [Query tag contents](#query-tag-contents).
 
 ---
 
@@ -77,7 +77,7 @@ query-comment:
   comment: '{{ altimate_snowflake_query_tags.get_query_comment(node) }}'
   append: true
 
-# Enable query tags — lean session-level tags via dispatch
+# Enable query tags via dispatch
 dispatch:
   - macro_namespace: dbt
     search_order:
@@ -166,16 +166,16 @@ The query comment contains comprehensive metadata with no character limit:
 
 ### Query Tag (session-level)
 
-The query tag is written to Snowflake's native `QUERY_TAG` session parameter. Its contents are controlled by the `altimate_query_tag_level` var:
+The query tag is written to Snowflake's native `QUERY_TAG` session parameter. Its contents are controlled by the `altimate_query_tag_fields` var:
 
 | Level | Contents |
 |---|---|
-| `lean` (default) | Session-level keys from `profiles.yml`, user-supplied tags, `thread_id`, `is_incremental` |
-| `full` | Everything the query comment carries, plus the above |
+| `all` (default) | Everything the query comment carries, plus the keys below |
+| `session` | Only session-level keys from `profiles.yml`, user-supplied tags, `thread_id`, `is_incremental` |
 
-`lean` keeps the tag small; all other metadata is still available in the query comment.
+`all` is the default because downstream consumers — including Altimate's own workload attribution — read the `QUERY_TAG` column rather than parsing query comments. `session` keeps the tag small; all other metadata is still available in the query comment either way.
 
-| Field (lean) | Description |
+| Field (`session`) | Description |
 |---|---|
 | `dbt_integration_id` | Altimate integration identifier (from `profiles.yml`) |
 | `dbt_integration_environment` | Environment (PROD, DEV, etc.) (from `profiles.yml`) |
@@ -190,17 +190,17 @@ The query tag is written to Snowflake's native `QUERY_TAG` session parameter. It
 
 <a name="query-tag-contents"></a>
 
-### Put the Full Metadata Set in the Native `QUERY_TAG`
+### Keep the Native `QUERY_TAG` Small
 
-Use this when downstream tooling — cost allocation, chargeback, monitoring — reads Snowflake's `QUERY_TAG` column instead of parsing query comments:
+By default the query tag carries the full metadata set, because downstream tooling — cost allocation, chargeback, monitoring — reads Snowflake's `QUERY_TAG` column instead of parsing query comments. To carry only session-level keys instead:
 
 ```yaml
 # dbt_project.yml
 vars:
-  altimate_query_tag_level: 'full'   # 'lean' (default) | 'full'
+  altimate_query_tag_fields: 'session'   # 'all' (default) | 'session'
 ```
 
-Query comments are unaffected and continue to carry the full metadata set either way. This works identically in dbt Core and dbt Cloud.
+Query comments are unaffected and carry the full metadata set either way. This works identically in dbt Core and dbt Cloud.
 
 **Staying under Snowflake's 2000-character limit.** Snowflake rejects a `QUERY_TAG` over 2000 characters, which would fail the model, so the package shrinks the tag to fit. Expendable fields are dropped first (`node_meta`, `node_tags`, `node_refs`, `raw_code_hash`, `node_original_file_path`, then progressively more) and a message naming the dropped fields is written to the dbt log. The keys identifying the run (`node_id`, `node_name`, `node_alias`, `project_name`, `invocation_id`, `target_database`, `target_schema`, `dbt_integration_*`) and every user-supplied key are never dropped. If the tag still does not fit, the original session tag is preserved and a warning is printed — the model still runs.
 
@@ -249,9 +249,9 @@ query-comment:
 
 ## Upgrading from v2.0
 
-Version 2.1 is backward compatible — the default query tag is unchanged. It adds:
+Version 3.0 changes what the native `QUERY_TAG` carries by default. Read point 1 before upgrading.
 
-1. **`altimate_query_tag_level: 'full'`** — opt in to the full metadata set in the native `QUERY_TAG`.
+1. **The native `QUERY_TAG` now carries the full metadata set by default.** This is a behaviour change: tags grow from a handful of keys to the full set. Set `altimate_query_tag_fields: 'session'` to keep the 2.0 behaviour.
 2. **Model-level `query_tag` config is honoured again** — this package overrides dbt's `snowflake__set_query_tag`, which handles that config; v2.0 dropped it, so the config was silently ignored.
 3. **`env_vars_to_query_tag_list` restored** — reverses removal note 5 below.
 4. **Query tags over 2000 characters are trimmed field by field** instead of being discarded wholesale.
@@ -261,7 +261,7 @@ Version 2.1 is backward compatible — the default query tag is unchanged. It ad
 Version 2.0 introduces query comments as the primary metadata carrier. Breaking changes:
 
 1. **Add `query-comment` to your `dbt_project.yml`** (new requirement — this is where all metadata now lives)
-2. **Query tags are lean by default** — only session-level keys (`dbt_integration_id`, `dbt_integration_environment`) plus `thread_id` and `is_incremental` remain in the query tag. All other metadata moved to query comments. Set `altimate_query_tag_level: 'full'` (2.1+) to keep the v1 behaviour of carrying everything in the query tag.
+2. **Query tags were lean in 2.0** — only session-level keys (`dbt_integration_id`, `dbt_integration_environment`) plus `thread_id` and `is_incremental` remained in the query tag; all other metadata moved to query comments. 3.0 restores the v1 behaviour of carrying everything in the query tag.
 3. **`unset_query_tag` macro added** — properly restores session state after model execution
 4. **`extra` parameter removed from `set_query_tag`** — if you were passing custom fields via `set_query_tag(extra={...})`, move them to `get_query_comment(node, extra={...})` in your `query-comment` config instead.
 5. **`env_vars_to_query_tag_list` variable removed in 2.0, restored in 2.1** — environment variables are added to query tags again.
