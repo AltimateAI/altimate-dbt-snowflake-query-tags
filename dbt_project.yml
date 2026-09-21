@@ -1,4 +1,4 @@
 name: 'altimate_snowflake_query_tags'
-version: '2.0.0'
+version: '2.1.0'
 config-version: 2
 require-dbt-version: ">=1.5.0"
