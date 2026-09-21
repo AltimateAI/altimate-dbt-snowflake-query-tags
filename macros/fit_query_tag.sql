@@ -1,4 +1,4 @@
-{% macro altimate_fit_query_tag(query_tag) %}
+{% macro altimate_fit_query_tag(query_tag, protected_keys = []) %}
     {#
         Snowflake rejects a QUERY_TAG longer than 2000 characters, which fails
         the model. Shrink the tag to fit by dropping the least useful fields
@@ -9,11 +9,21 @@
 
         Never dropped: the keys that identify the run (node_id, node_name,
         node_alias, project_name, invocation_id, target_database,
-        target_schema, dbt_integration_*) and user-supplied keys from
-        profiles.yml, the `query_tag` model config, and
-        `env_vars_to_query_tag_list`. Downstream consumers depend on those.
+        target_schema, dbt_integration_*) and `protected_keys`, which the
+        caller populates with every user-supplied key.
     #}
-    {%- set max_length = var('altimate_query_tag_max_length', 2000) -%}
+    {%- set snowflake_limit = 2000 -%}
+    {%- set configured = var('altimate_query_tag_max_length', snowflake_limit) -%}
+
+    {# The var can only lower Snowflake's ceiling; coerce so a quoted YAML value
+       ("2000") does not fail the comparison below. #}
+    {%- set requested = configured | int(0) -%}
+    {%- if requested <= 0 or requested > snowflake_limit -%}
+        {%- do log("altimate-query-tag-warning: altimate_query_tag_max_length '{}' is not a positive integer of at most {}, which is Snowflake's hard limit. Using {}.".format(configured, snowflake_limit, snowflake_limit), True) -%}
+        {%- set max_length = snowflake_limit -%}
+    {%- else -%}
+        {%- set max_length = requested -%}
+    {%- endif -%}
 
     {%- for key in var('altimate_query_tag_exclude', []) -%}
         {%- do query_tag.pop(key, none) -%}
@@ -35,7 +45,8 @@
     ] -%}
     {%- set dropped = [] -%}
     {%- for key in droppable -%}
-        {%- if tojson(query_tag) | length > max_length and key in query_tag -%}
+        {# A user value that happens to share a generated key's name is theirs, not ours #}
+        {%- if tojson(query_tag) | length > max_length and key in query_tag and key not in protected_keys -%}
             {%- do query_tag.pop(key) -%}
             {%- do dropped.append(key) -%}
         {%- endif -%}
@@ -46,6 +57,6 @@
         {{ return(query_tag) }}
     {%- endif -%}
 
-    {%- do log("altimate-query-tag-warning: query tag is {} characters and cannot be reduced below {}. The original session query tag will be preserved instead. Consider shortening user-supplied query tag values or setting altimate_query_tag_fields to 'session'.".format(tojson(query_tag) | length, max_length), True) -%}
+    {%- do log("altimate-query-tag-warning: query tag is {} characters and cannot be reduced below {}. The original session query tag will be preserved instead. Consider shortening user-supplied query tag values.".format(tojson(query_tag) | length, max_length), True) -%}
     {{ return(none) }}
 {% endmacro %}
