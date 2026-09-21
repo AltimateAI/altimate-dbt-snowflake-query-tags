@@ -14,6 +14,7 @@ from context import (  # noqa: E402
 )
 
 ALL_FIELDS = {"altimate_query_tag_fields": "all"}
+SESSION_ONLY = {"altimate_query_tag_fields": "session"}
 
 SESSION_LEVEL_KEYS = {
     "dbt_integration_id", "dbt_integration_environment", "thread_id", "is_incremental",
@@ -43,16 +44,24 @@ IDENTITY_KEYS = [
 # field sets
 # --------------------------------------------------------------------------
 
-def test_session_is_the_default():
-    """An unchanged project must emit what it emitted on 2.0."""
+def test_all_is_the_default():
     tag, _, _ = set_query_tag(session_tag=SESSION_TAG)
+    assert tag["node_id"] == "model.jaffle.my_model"
+    assert tag["project_name"] == "jaffle"
+
+
+def test_session_reproduces_the_2_0_tag():
+    """The opt-out must emit exactly what 2.0 emitted."""
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=SESSION_ONLY)
     assert set(tag) == SESSION_LEVEL_KEYS
 
 
-def test_all_carries_the_full_metadata_set():
-    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=ALL_FIELDS)
-    assert tag["node_id"] == "model.jaffle.my_model"
-    assert tag["project_name"] == "jaffle"
+def test_config_compatibility_a_2_0_project_needs_no_changes():
+    """No var set, no config edits: the package still runs and tags the query."""
+    tag, logs, statement = set_query_tag(session_tag=SESSION_TAG)
+    assert statement.startswith("alter session set query_tag = '")
+    assert logs == []
+    assert tag["dbt_integration_id"] == 228
 
 
 def test_all_matches_the_select_package_key_set():
@@ -229,7 +238,7 @@ def test_unknown_value_warns_and_falls_back_to_the_default():
     tag, logs, _ = set_query_tag(
         session_tag=SESSION_TAG, dbt_vars={"altimate_query_tag_fields": "EVERYTHING"}
     )
-    assert set(tag) == SESSION_LEVEL_KEYS
+    assert tag["node_id"] == "model.jaffle.my_model"
     assert any("is not recognised" in message for message in logs)
 
 
