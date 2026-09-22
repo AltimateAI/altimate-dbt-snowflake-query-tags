@@ -253,7 +253,19 @@ query-comment:
 
 ## Upgrading from v2.0
 
-Version 2.1 is backward compatible — an unchanged project emits the same query tag it did on 2.0, byte for byte. It adds:
+Version 2.1 requires no configuration changes. A project that does not use the inputs restored below emits the same query tag it did on 2.0, byte for byte.
+
+**Three v2 configurations do change**, because 2.0 ignored them and 2.1 honours them again. Each is a bug fix, and each is observable:
+
+| v2 config, unchanged | On 2.1 |
+|---|---|
+| `env_vars_to_query_tag_list` | its environment keys now appear in the tag |
+| mapping `+query_tag: {...}` | that mapping now appears in the tag |
+| scalar `+query_tag: finance` | payload unchanged, but a warning is logged (2.0 skipped it silently) |
+
+If you need byte-identical output including those cases, remove the config rather than pinning to 2.0 — the values were never reaching the tag.
+
+2.1 adds:
 
 > **Scalar `query_tag` configs.** dbt-snowflake accepts a bare string (`+query_tag: finance`). This package builds the tag as a JSON object, so a string has no key to file it under and is skipped. That was already true in 2.0, which skipped it silently; 2.1 logs a warning naming the value, so a project using scalars will see new log lines even though the tag output is unchanged. Convert them to mappings (`+query_tag: {"team": "finance"}`) to have them merged.
 

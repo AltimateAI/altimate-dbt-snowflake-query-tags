@@ -110,6 +110,50 @@ def test_query_comment_is_unaffected_by_tag_fields():
 # user-supplied tags
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# upgrade compatibility vs released 2.0.0
+#
+# 2.0 emitted only session keys plus thread_id/is_incremental, and ignored
+# env_vars_to_query_tag_list and the model-level query_tag config entirely.
+# Restoring those is a fix, but it is an observable change for a project that
+# already had them configured. These tests keep that distinction explicit so
+# the "byte-identical upgrade" claim cannot quietly widen.
+# --------------------------------------------------------------------------
+
+def test_upgrade_is_byte_identical_without_the_restored_inputs():
+    tag, logs, _ = set_query_tag(session_tag=SESSION_TAG)
+    assert set(tag) == SESSION_LEVEL_KEYS
+    assert logs == []
+
+
+def test_restored_env_var_input_is_an_observable_change():
+    """2.0 ignored env_vars_to_query_tag_list; 2.1 honours it."""
+    base, _, _ = set_query_tag(session_tag=SESSION_TAG)
+    tag, _, _ = set_query_tag(
+        session_tag=SESSION_TAG,
+        dbt_vars={"env_vars_to_query_tag_list": ["MY_RUN_OWNER"]},
+        env={"MY_RUN_OWNER": "finance"},
+    )
+    assert set(tag) - set(base) == {"my_run_owner"}
+
+
+def test_restored_mapping_config_is_an_observable_change():
+    """2.0 ignored the model-level query_tag config; 2.1 merges it."""
+    base, _, _ = set_query_tag(session_tag=SESSION_TAG)
+    tag, _, _ = set_query_tag(
+        session_tag=SESSION_TAG, model_config={"query_tag": {"cost_center": "FIN-42"}}
+    )
+    assert set(tag) - set(base) == {"cost_center"}
+
+
+def test_scalar_config_keeps_the_2_0_payload_but_adds_a_warning():
+    """The one case where output is unchanged and only the log differs."""
+    base, base_logs, _ = set_query_tag(session_tag=SESSION_TAG)
+    tag, logs, _ = set_query_tag(session_tag=SESSION_TAG, model_config={"query_tag": "finance"})
+    assert tag == base
+    assert base_logs == [] and len(logs) == 1
+
+
 def test_model_level_query_tag_config_is_merged():
     for dbt_vars in ({}, ALL_FIELDS):
         tag, _, _ = set_query_tag(
