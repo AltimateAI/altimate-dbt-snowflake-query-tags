@@ -53,16 +53,16 @@ IDENTITY_KEYS = [
 # field sets
 # --------------------------------------------------------------------------
 
-def test_all_is_the_default():
+def test_session_is_the_default():
+    """An unchanged project must emit exactly what it emitted on 2.0."""
     tag, _, _ = set_query_tag(session_tag=SESSION_TAG)
+    assert set(tag) == SESSION_LEVEL_KEYS
+
+
+def test_all_carries_the_full_metadata_set():
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=ALL_FIELDS)
     assert tag["node_id"] == "model.jaffle.my_model"
     assert tag["project_name"] == "jaffle"
-
-
-def test_session_reproduces_the_2_0_tag():
-    """The opt-out must emit exactly what 2.0 emitted."""
-    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, dbt_vars=SESSION_ONLY)
-    assert set(tag) == SESSION_LEVEL_KEYS
 
 
 def test_config_compatibility_a_2_0_project_needs_no_changes():
@@ -71,6 +71,7 @@ def test_config_compatibility_a_2_0_project_needs_no_changes():
     assert statement.startswith("alter session set query_tag = '")
     assert logs == []
     assert tag["dbt_integration_id"] == 228
+    assert set(tag) == SESSION_LEVEL_KEYS, "the default must not change the 2.0 output"
 
 
 def test_all_matches_the_comparison_document_key_set():
@@ -285,7 +286,7 @@ def test_unknown_value_warns_and_falls_back_to_the_default():
     tag, logs, _ = set_query_tag(
         session_tag=SESSION_TAG, dbt_vars={"altimate_query_tag_fields": "EVERYTHING"}
     )
-    assert tag["node_id"] == "model.jaffle.my_model"
+    assert set(tag) == SESSION_LEVEL_KEYS
     assert any("is not recognised" in message for message in logs)
 
 

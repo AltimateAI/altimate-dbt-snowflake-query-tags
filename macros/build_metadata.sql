@@ -18,7 +18,7 @@
     {# run_started_at is already UTC-aware in dbt, no explicit timezone conversion needed #}
     {%- do metadata.update(
         app='dbt',
-        dbt_snowflake_query_tags_version=var('dbt_snowflake_query_tags_version', '3.0.0'),
+        dbt_snowflake_query_tags_version=var('dbt_snowflake_query_tags_version', '2.1.0'),
         dbt_version=dbt_version,
         project_name=project_name,
         target_name=target.name,

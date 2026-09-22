@@ -5,13 +5,14 @@
         is only populated by custom materializations that pass it.
 
         Controlled by the `altimate_query_tag_fields` var:
-          all (default) - everything the query comment carries, trimmed to fit
-                          Snowflake's 2000-character limit. Downstream consumers
-                          read QUERY_TAG rather than parsing query comments, so
-                          this is where the metadata is useful.
-          session       - only the keys set in profiles.yml, plus user-supplied
-                          tags, thread_id and is_incremental. Reproduces the 2.0
-                          tag byte for byte.
+          session (default) - only the keys set in profiles.yml, plus
+                              user-supplied tags, thread_id and is_incremental.
+                              Reproduces the 2.0 tag byte for byte, so upgrading
+                              an unchanged project does not alter its output.
+          all               - everything the query comment carries, trimmed to
+                              fit Snowflake's 2000-character limit. Needed by
+                              downstream consumers that read QUERY_TAG rather
+                              than parsing query comments.
     #}
     {% set original_query_tag = get_current_query_tag() %}
     {% set original_query_tag_parsed = {} %}
@@ -23,10 +24,10 @@
 
     {% set query_tag = {} %}
 
-    {% set tag_fields = var('altimate_query_tag_fields', 'all') | string | trim | lower %}
+    {% set tag_fields = var('altimate_query_tag_fields', 'session') | string | trim | lower %}
     {% if tag_fields not in ['session', 'all'] %}
-        {% do log("altimate-query-tag-warning: altimate_query_tag_fields '{}' is not recognised, falling back to 'all'. Valid values are 'session' and 'all'.".format(tag_fields), True) %}
-        {% set tag_fields = 'all' %}
+        {% do log("altimate-query-tag-warning: altimate_query_tag_fields '{}' is not recognised, falling back to 'session'. Valid values are 'session' and 'all'.".format(tag_fields), True) %}
+        {% set tag_fields = 'session' %}
     {% endif %}
 
     {# With 'all', the query tag carries the same metadata as the query comment #}
