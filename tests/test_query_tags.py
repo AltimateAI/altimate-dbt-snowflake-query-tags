@@ -20,10 +20,12 @@ SESSION_LEVEL_KEYS = {
     "dbt_integration_id", "dbt_integration_environment", "thread_id", "is_incremental",
 }
 
-# Every key the select package writes to QUERY_TAG, from the Altimate vs Select
-# comparison. 'all' is expected to match this set exactly, except for select's
-# own dbt_query_tags_version.
-SELECT_PACKAGE_KEYS = [
+# The key list quoted in the "Altimate vs Select" comparison document. Note what
+# that list is and is not: it was read off a tag captured in a tenant running
+# BOTH this package and select's successor (dbt_query_tags 3.1.0), so it is the
+# union of what those packages wrote, not the native tag of any one package.
+# 'all' is expected to match it exactly, except for select's own version key.
+COMPARISON_DOC_KEYS = [
     "dbt_integration_id", "dbt_integration_environment", "node_name", "node_alias",
     "node_package_name", "node_database", "node_schema", "node_id", "node_resource_type",
     "node_meta", "node_tags", "materialized", "app", "dbt_snowflake_query_tags_version",
@@ -33,6 +35,13 @@ SELECT_PACKAGE_KEYS = [
     "node_original_file_path", "invocation_command", "node_refs", "raw_code_hash",
     "dbt_cloud_run_reason_category", "dbt_cloud_run_reason",
 ]
+
+# What get-select's dbt-snowflake-query-tags 2.6.0 actually writes to the native
+# QUERY_TAG, from its macros/query_tags.sql: user-supplied values (session tag,
+# env vars, model config, extra) plus exactly these four. Its node metadata goes
+# to the query comment, as ours did in 2.0. Kept explicit so the comparison in
+# this file cannot drift back into conflating the two channels.
+SELECT_2_6_NATIVE_TAG_KEYS = ["app", "dbt_snowflake_query_tags_version", "thread_id", "is_incremental"]
 
 IDENTITY_KEYS = [
     "node_id", "node_name", "node_alias", "project_name", "invocation_id",
@@ -64,10 +73,25 @@ def test_config_compatibility_a_2_0_project_needs_no_changes():
     assert tag["dbt_integration_id"] == 228
 
 
-def test_all_matches_the_select_package_key_set():
+def test_all_matches_the_comparison_document_key_set():
     tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV, dbt_vars=ALL_FIELDS)
-    assert [key for key in SELECT_PACKAGE_KEYS if key not in tag] == []
-    assert [key for key in tag if key not in SELECT_PACKAGE_KEYS] == []
+    assert [key for key in COMPARISON_DOC_KEYS if key not in tag] == []
+    assert [key for key in tag if key not in COMPARISON_DOC_KEYS] == []
+
+
+def test_all_is_a_superset_of_selects_native_tag():
+    """`all` is richer than select 2.6.0's native tag, not parity with it."""
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV, dbt_vars=ALL_FIELDS)
+    assert all(key in tag for key in SELECT_2_6_NATIVE_TAG_KEYS)
+    extra = set(tag) - set(SELECT_2_6_NATIVE_TAG_KEYS) - set(json.loads(SESSION_TAG))
+    assert "node_id" in extra and "project_name" in extra
+
+
+def test_session_matches_selects_native_tag_shape():
+    """Our opt-out carries no more node metadata than select 2.6.0's native tag."""
+    tag, _, _ = set_query_tag(session_tag=SESSION_TAG, env=DBT_CLOUD_ENV, dbt_vars=SESSION_ONLY)
+    beyond_user_values = set(tag) - set(json.loads(SESSION_TAG))
+    assert beyond_user_values <= set(SELECT_2_6_NATIVE_TAG_KEYS)
 
 
 def test_all_fits_the_limit_for_a_typical_node():
@@ -217,6 +241,29 @@ def test_boundary_at_the_configured_limit():
     )
     assert len(json.dumps(trimmed)) < exact
     assert any("dropped" in message for message in logs)
+
+
+def test_lowered_ceiling_is_best_effort_when_the_original_exceeds_it():
+    """A lowered max_length cannot shrink the original session tag.
+
+    When the protected keys alone exceed the configured ceiling, the package
+    falls back to the original session tag, which may be longer than that
+    ceiling. Snowflake's own 2000-character limit is still honoured, because it
+    rejected anything longer when the original was set.
+    """
+    big_session_tag = json.dumps({
+        "dbt_integration_id": 228,
+        "dbt_integration_environment": "PRD_404733",
+        "customer_context": "c" * 700,
+    })
+    tag, logs, _ = set_query_tag(
+        session_tag=big_session_tag,
+        dbt_vars={"altimate_query_tag_fields": "all", "altimate_query_tag_max_length": 400},
+    )
+    assert tag == json.loads(big_session_tag), "expected the fallback to the original tag"
+    assert len(json.dumps(tag)) > 400, "documents that the configured ceiling is best-effort"
+    assert len(json.dumps(tag)) <= 2000, "Snowflake's hard limit still holds"
+    assert any("cannot be reduced" in message for message in logs)
 
 
 def test_exclude_var_removes_keys():

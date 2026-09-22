@@ -60,7 +60,7 @@ Create or update your `packages.yml` file to include the Altimate query tags pac
 ```yaml
 packages:
   - git: "https://github.com/AltimateAI/altimate-dbt-snowflake-query-tags.git"
-    revision: main
+    revision: v3.0.0   # pin a release tag; `main` tracks development
 
   # Your other packages
   - package: dbt-labs/dbt_utils
@@ -111,7 +111,7 @@ dbt deps
 ```yaml
 packages:
   - git: "https://github.com/AltimateAI/altimate-dbt-snowflake-query-tags.git"
-    revision: main
+    revision: v3.0.0   # pin a release tag; `main` tracks development
 ```
 
 ### 3. Configure `dbt_project.yml`
@@ -200,9 +200,13 @@ vars:
   altimate_query_tag_fields: 'session'   # 'all' (default) | 'session'
 ```
 
-Query comments are unaffected and carry the full metadata set either way. This works identically in dbt Core and dbt Cloud.
+Query comments are unaffected and carry the full metadata set either way.
+
+The mechanism is the same in dbt Core and dbt Cloud — the var lives in `dbt_project.yml` in both. The dbt Cloud path has been exercised through dbt Core only; the `dbt_cloud_*` fields populate from environment variables that exist solely in Cloud, and that has not yet been read back from `QUERY_HISTORY` on a Cloud run.
 
 **Staying under Snowflake's 2000-character limit.** `altimate_query_tag_max_length` can only lower this ceiling, never raise it — Snowflake rejects a longer tag outright. Snowflake rejects a `QUERY_TAG` over 2000 characters, which would fail the model, so the package shrinks the tag to fit. Expendable fields are dropped first (`node_meta`, `node_tags`, `node_refs`, `raw_code_hash`, `node_original_file_path`, then progressively more) and a message naming the dropped fields is written to the dbt log. The keys identifying the run (`node_id`, `node_name`, `node_alias`, `project_name`, `invocation_id`, `target_database`, `target_schema`, `dbt_integration_*`) and every user-supplied key are never dropped. If the tag still does not fit, the original session tag is preserved and a warning is printed — the model still runs.
+
+Snowflake's 2000-character limit is always honoured. A *lower* `altimate_query_tag_max_length` is best-effort: when the protected keys alone exceed it, the package falls back to the original session tag, which may itself be longer than the configured value (never longer than 2000, since Snowflake would have rejected it when it was set).
 
 Two vars tune this:
 
@@ -250,6 +254,8 @@ query-comment:
 ## Upgrading from v2.0
 
 Version 3.0 requires no configuration changes — every 2.0 `dbt_project.yml` keeps working unchanged. What changes is the content of the native `QUERY_TAG`. Read point 1 before upgrading.
+
+> **Scalar `query_tag` configs.** dbt-snowflake accepts a bare string (`+query_tag: finance`). This package builds the tag as a JSON object, so a string has no key to file it under and is skipped. That was already true in 2.0, which skipped it silently; 3.0 logs a warning naming the value, so a project using scalars will see new log lines even though the tag output is unchanged. Convert them to mappings (`+query_tag: {"team": "finance"}`) to have them merged.
 
 1. **The native `QUERY_TAG` carries the full metadata set by default.** Tags grow from 4 keys to the full set (roughly 900 characters). The extra keys are additive, so a consumer reading a specific key is unaffected. Set `altimate_query_tag_fields: 'session'` to reproduce the 2.0 tag exactly.
 2. **Model-level `query_tag` config is honoured again** — this package overrides dbt's `snowflake__set_query_tag`, which handles that config; v2.0 dropped it, so the config was silently ignored.
